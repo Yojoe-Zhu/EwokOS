@@ -5,44 +5,10 @@
 #include <stdlib.h>
 #include <syscall.h>
 #include <sconf.h>
-#include <trunk.h>
+#include "line-edit.h"
 
 #define KEY_BACKSPACE 127
 #define KEY_LEFT 0x8
-
-static int32_t gets(tstr_t* buf) {
-	tstr_empty(buf);	
-	while(true) {
-		int c = getch();
-		if(c == 0)
-			return -1;
-
-		if (c == KEY_BACKSPACE) {
-			if (buf->size > 0) {
-				//delete last char
-				putch(KEY_LEFT); 
-				putch(' ');
-				putch(KEY_LEFT); 
-				buf->size--;
-			}
-		}
-		else if (c == 8) {
-			if (buf->size > 0) {
-				//delete last char
-				putch(c); 
-				buf->size--;
-			}
-		}
-		else {
-			putch(c);
-			if(c == '\r' || c == '\n')
-				break;
-			tstr_addc(buf, c);
-		}
-	}
-	tstr_addc(buf, 0);
-	return 0;
-}
 
 static int cd(const char* dir) {
 	char cwd[FULL_NAME_MAX];
@@ -308,17 +274,19 @@ static int32_t read_config() {
 int main(int argc, char* argv[]) {
 	(void)argc;
 	(void)argv;
-	tstr_t* cmdstr = tstr_new("", MFS);
+	struct line_edit *l = NULL;
+	int uid = getuid();
+	char buf[32] = {0};
 
 	read_config();
-	int uid = getuid();
 
+	snprintf(buf, sizeof(buf), "ewok %c ", uid==0?'#':'$');
+	l = line_edit_new(buf);
 	while(1) {
-		printf("ewok %c ", uid==0?'#':'$');
-		if(gets(cmdstr) != 0)
+		if (do_line_edit(l) != 0)
 			break;
 
-		char* cmd = (char*)CS(cmdstr);
+		char *cmd = l->buffer;
 		if(cmd[0] == 0)
 			continue;
 		if(handle(cmd) == 0)
@@ -334,13 +302,13 @@ int main(int argc, char* argv[]) {
 		int child_pid = fork();
 		if (child_pid == 0) {
 			int res = run_cmd(cmd);
-			tstr_free(cmdstr);	
+			line_edit_free(l);
 			return res;
 		}
 		else if(fg) {
 			wait(child_pid);
 		}
 	}
-	tstr_free(cmdstr);	
+	line_edit_free(l);
 	return 0;
 }
