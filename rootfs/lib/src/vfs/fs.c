@@ -43,14 +43,7 @@ int fs_pipe_open(int fds[2]) {
 }
 
 int fs_close(int fd) {
-	fs_info_t info;
-	if(fd < 0 || syscall2(SYSCALL_PFILE_NODE_BY_FD, fd, (int32_t)&info) != 0)
-		return -1;
-	if(vfs_close(fd) != 0)
-		return -1;
-	if(info.dev_serv_pid > 0)
-		ipc_req(info.dev_serv_pid, 0, FS_CLOSE, &info, sizeof(fs_info_t), false);
-	return 0;
+	return vfs_close(fd);
 }
 
 int fs_remove(const char* name) {
@@ -303,10 +296,18 @@ char* fs_read_file(const char* fname, int32_t *size) {
 	}
 
 	char* buf = (char*)malloc(info.size);
-	int res = read(fd, buf, info.size);
+	int res = 0;
+	int sz = info.size;
+	char* p = buf;
+	while(sz > 0) {
+		res = read(fd, p, sz);
+		if(res < 0)
+			break;
+		sz -= res;
+		p += res;
+	}
 	fs_close(fd);
-
-	if(res <= 0) {
+	if(sz > 0 ) {
 		free(buf);
 		buf = NULL;
 		*size = 0;
@@ -315,28 +316,33 @@ char* fs_read_file(const char* fname, int32_t *size) {
 	return buf;
 }
 
-int32_t fs_full_name(const char* fname, char* full, uint32_t full_len) {
+tstr_t* fs_full_name(const char* fname) {
 	char pwd[FULL_NAME_MAX];
 	getcwd(pwd, FULL_NAME_MAX-1);
 
+	tstr_t* full = tstr_new("", MFS);
 	if(fname[0] == 0) {
-		strncpy(full, pwd, full_len-1);
+		tstr_cpy(full, pwd);
 	}
 	else if(fname[0] == '/') {
-		strcpy(full, fname);
+		tstr_cpy(full, fname);
 	}
 	else {
-		if(strcmp(pwd, "/") == 0)
-			snprintf(full, full_len-1, "/%s", fname);
-		else
-			snprintf(full, full_len-1, "%s/%s", pwd, fname);
+		if(strcmp(pwd, "/") == 0) {
+			tstr_cpy(full, "/");
+		}
+		else {
+			tstr_cpy(full, pwd);
+			tstr_addc(full, '/');
+		}
+		tstr_add(full, fname);
 	}
-	return 0;
+	return full;
 }
 
-int32_t fs_parse_name(const char* fname, char* dir, uint32_t dir_len, char* name, uint32_t name_len) {
-	char full[FULL_NAME_MAX];
-	fs_full_name(fname, full, FULL_NAME_MAX);
+int32_t fs_parse_name(const char* fname, tstr_t* dir, tstr_t* name) {
+	tstr_t* fullstr = fs_full_name(fname);
+	char* full = (char*)CS(fullstr);
 	int32_t i = strlen(full);
 	while(i >= 0) {
 		if(full[i] == '/') {
@@ -345,9 +351,10 @@ int32_t fs_parse_name(const char* fname, char* dir, uint32_t dir_len, char* name
 		}
 		--i;	
 	}
-	strncpy(dir, full, dir_len-1); 
-	strncpy(name, full+i+1, name_len-1); 
-	if(dir[0] == 0)
-		strcpy(dir, "/");
+	tstr_cpy(dir, full);
+	tstr_cpy(name, full+i+1);
+	if(CS(dir)[0] == 0)
+		tstr_cpy(dir, "/");
+	tstr_free(fullstr);
 	return 0;
 }

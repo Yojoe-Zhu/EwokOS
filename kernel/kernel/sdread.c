@@ -2,9 +2,7 @@
 #include <kstring.h>
 #include <dev/basic_dev.h>
 #include <mm/kmalloc.h>
-
-static char buf1[SDC_BLOCK_SIZE];
-static char buf2[SDC_BLOCK_SIZE];
+#include <sdread.h>
 
 static int32_t read_block(int32_t block, char* buf) {
 	uint32_t typeid = dev_typeid(DEV_SDC, 0);
@@ -21,5 +19,5 @@ static int32_t read_block(int32_t block, char* buf) {
 }
 
 char* from_sd(const char *filename, int32_t* sz) { 
-	return ext2_load(filename, sz, km_alloc, read_block, buf1, buf2);
+	return ext2_load(filename, sz, read_block, KMFS);
 }

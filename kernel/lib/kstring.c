@@ -175,6 +175,61 @@ inline char *strchr(const char *str, int32_t character) {
 		return NULL;
 }
 
+inline int32_t memcmp(void* m1, void* m2, uint32_t sz) {
+	char *p1 = (char*)m1;
+	char *p2 = (char*)m2;
+	if(sz == 0)
+		return 0;
+
+	while (true) {
+		sz--;
+		if(p1[sz] > p2[sz])
+			return 1;
+		else if(p1[sz] > p2[sz])
+			return -1;
+		if(sz == 0)
+			break;
+	}
+	return 0;
+}
+
+static const char *strstr_bmh(const char *haystack, const char *needle) {
+	int needle_len, haystack_len, bc_table[UCHAR_MAX + 1], i;
+
+	needle_len = strlen(needle);
+	haystack_len = strlen(haystack);
+
+	/* Sanity check. */
+	if (needle[0] == '\0')
+		return haystack;
+
+	/* Initialize bad char shift table and populate with analysis of needle. */
+	for (i = 0; i < UCHAR_MAX + 1; i++)
+		bc_table[i] = needle_len;
+	for (i = 0; i < needle_len - 1; i++) 
+		bc_table[(unsigned char)needle[i]] = needle_len - 1 - i;
+
+	while (haystack_len >= needle_len){
+		/* Match needle to haystack from right to left. */
+		for (i = needle_len - 1; needle[i] == haystack[i]; i--)
+			if (i == 0)
+				return haystack;
+		/* Shift haystack based on bad char shift table. */ 
+		haystack_len -= bc_table[(unsigned char)haystack[needle_len - 1]];
+		haystack += bc_table[(unsigned char)haystack[needle_len - 1]];
+	}
+	/* No match. */
+	return NULL;
+}
+
+/**
+ * Finds the first occurrence of the sub-string needle in the string haystack.
+ * Returns NULL if needle was not found.
+ */
+const char *strstr(const char *haystack, const char *needle) {
+	return strstr_bmh(haystack, needle);	
+}
+
 /*
  * strtok tokenizes the given string using the given delimiters. If str != NULL,
  * then it returns a point32_ter to the first token. If str == NULL, then it returns
@@ -191,7 +246,6 @@ inline char *strtok(char *str, const char *delimiters) {
 	char *token = NULL;
 	if (str != NULL)
 		last = str;
-
 	token = last;
 
 	/* skip leading delimiters */
@@ -213,7 +267,6 @@ inline char *strtok(char *str, const char *delimiters) {
 		*last = '\0';
 		last++;
 	}
-
 	return token;
 }
 

@@ -10,9 +10,16 @@ void free(void* p) {
 	syscall1(SYSCALL_PFREE, (int)p);
 }
 
+static mem_funcs_t mfs;
+mem_funcs_t* mem_funcs() {
+	mfs.mlc = malloc;
+	mfs.fr = free;
+	return &mfs;
+}
+
 int32_t atoi_base(const char *s, int32_t b) {
 	int32_t i, result, x, error;
-	for (i = result = error = 0; s[i]!='\0'; i++, result += x) {
+	for (i = result = error = x = 0; s[i]!='\0'; i++, result += x) {
 		if (b==2) {
 			if (!(s[i]>47&&s[i]<50)){			//rango
 				error = 1;

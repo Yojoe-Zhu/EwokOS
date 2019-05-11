@@ -19,6 +19,7 @@ OBJDUMP = arm-none-eabi-objdump
 CFLAGS = \
 	-I. -I../include -I../arch/arm/include \
 	-marm $(QEMU_CFLAGS) \
+	-Wstrict-prototypes \
 	-pedantic -Wall -Wextra -msoft-float -fPIC -mapcs-frame \
 	-fno-builtin-printf -fno-builtin-strcpy -Wno-overlength-strings \
 	-fno-builtin-exit -fno-builtin-stdio \
@@ -58,6 +59,8 @@ LIB_OBJS = \
 	../lib/device.o \
 	../lib/sconf_parse.o \
 	../lib/ext2.o \
+	../lib/trunk.o \
+	../lib/tstr.o \
 	../arch/arm/common/memcpy.o \
 	../lib/vprintf.o
 

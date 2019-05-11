@@ -2,6 +2,7 @@
 #include <vfs/fs.h>
 #include <syscall.h>
 #include <kstring.h>
+#include <tstr.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <procinfo.h>
@@ -26,24 +27,25 @@ static char* read_from_sd(const char* fname, int32_t *size) {
 int exec(const char* cmd_line) {
 	char* img = NULL;
 	int32_t size;
-	char cmd[CMD_MAX];
-	int i;
-	for(i=0; i<CMD_MAX-1; i++) {
-		cmd[i] = cmd_line[i];
-		if(cmd[i] == 0 || cmd[i] == ' ')
-			break;
+	tstr_t* cmd = tstr_new("", MFS);
+	const char *p = cmd_line;
+	while(*p != 0 && *p != ' ') {
+		tstr_addc(cmd, *p);
+		p++;
 	}
-	cmd[i] = 0;
+	tstr_addc(cmd, 0);
 
 	mount_t mnt;
 	if(vfs_mount_by_fname("/", &mnt) != 0)
-		img = read_from_sd(cmd, &size);
+		img = read_from_sd(CS(cmd), &size);
 	else 
-		img = fs_read_file(cmd, &size);
+		img = fs_read_file(CS(cmd), &size);
 	if(img == NULL) {
-		printf("'%s' dosn't exist!\n", cmd);
+		printf("'%s' dosn't exist!\n", CS(cmd));
+		tstr_free(cmd);
 		return -1;
 	}
+	tstr_free(cmd);
 	int res = syscall3(SYSCALL_EXEC_ELF, (int)cmd_line, (int)img, size);
 	free(img);
 	return res;
@@ -86,28 +88,34 @@ unsigned int sleep(unsigned int secs) {
 int open(const char* fname, int flags) {
 	if(fname[0] == 0)
 		return -1;
-	char full[FULL_NAME_MAX];
-	fs_full_name(fname, full, FULL_NAME_MAX);
-
 	fs_info_t info;
-	if(fs_finfo(full, &info) != 0) { //not exist.
-		if((flags & O_WRONLY) == 0 ||
-				(flags & O_CREAT) == 0)
+	tstr_t* full = fs_full_name(fname);
+	const char* full_name = CS(full);
+	if(fs_finfo(full_name, &info) != 0) { //not exist.
+		if((flags & O_WRONLY) == 0 || (flags & O_CREAT) == 0) {
+			tstr_free(full);
 			return -1;
+		}
 
-		char dir[FULL_NAME_MAX];
-		char name[SHORT_NAME_MAX];
-		fs_parse_name(full, dir, FULL_NAME_MAX, name, SHORT_NAME_MAX);	
-
-		int fd = fs_open(dir, O_RDWR);
-		if(fd < 0)
+		tstr_t *dir = tstr_new("", MFS);
+		tstr_t *name = tstr_new("", MFS);
+		fs_parse_name(full_name, dir, name);
+		int fd = fs_open(CS(dir), O_RDWR);
+		int res = -1;
+		if(fd >= 0) {
+			res = fs_add(fd, CS(name), FS_TYPE_FILE);
+			fs_close(fd);
+		}
+		tstr_free(dir);
+		tstr_free(name);
+		if(res < 0) {
+			tstr_free(full);
 			return -1;
-		uint32_t res = fs_add(fd, name, FS_TYPE_FILE);
-		fs_close(fd);
-		if(res == 0)
-			return -1;
+		}
 	}
-	return fs_open(full, flags);
+	int ret = fs_open(full_name, flags);
+	tstr_free(full);
+	return ret;
 }
 
 int write(int fd, const void* buf, uint32_t size) {

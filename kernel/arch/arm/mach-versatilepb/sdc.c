@@ -4,6 +4,7 @@
 #include <kstring.h>
 #include <scheduler.h>
 #include <device.h>
+#include "dev/basic_dev.h"
 
 #define CONFIG_ARM_PL180_MMCI_CLOCK_FREQ 6250000
 #define MMC_RSP_PRESENT (1 << 0)
@@ -91,13 +92,13 @@ static inline void do_command(int32_t cmd, int32_t arg, int32_t resp) {
 	put32(SDC_BASE + COMMAND, 0x400 | (resp<<6) | cmd);
 }
 
-bool sdc_init() {
+bool sdc_init(void) {
 	_rxdone = 1;
 	_txdone = 1;
 	_rxbuf = km_alloc(SDC_BLOCK_SIZE);
 
-	put8(SDC_BASE + POWER, 0xBF); // power on
-	put8(SDC_BASE + CLOCK, 0xC6); // default CLK
+	put32(SDC_BASE + POWER, 0xBF); // power on
+	put32(SDC_BASE + CLOCK, 0xC6); // default CLK
 
 	// send init command sequence
 	do_command(0, 0, MMC_RSP_NONE);// idle state
@@ -135,7 +136,7 @@ static int32_t sdc_read_block(int32_t block) {
 
 	//printk("dataControl=%x\n", 0x93);
 	// 0x93=|9|0011|=|9|DMA=0,0=BLOCK,1=Host<-Card,1=Enable
-	put8(SDC_BASE + DATACTRL, 0x93);
+	put32(SDC_BASE + DATACTRL, 0x93);
 	//printk("getblock return\n");
 	CRIT_OUT(_p_lock)
 	return 0;
@@ -152,39 +153,43 @@ static inline int32_t sdc_read_done(char* buf) {
 	CRIT_OUT(_p_lock)
 	return 0;
 }
-
+static char _wbuf[SDC_BLOCK_SIZE];
 static int32_t sdc_write_block(int32_t block, const char* buf) {
 	uint32_t cmd, arg;
 	CRIT_IN(_p_lock)
 	if(_txdone == 0) {
 		CRIT_OUT(_p_lock)
-			return -1;
+		return -1;
 	}
-
-	//printk("putblock %d %x\n", block, buf);
-	_txbuf_index = buf; _txcount = SDC_BLOCK_SIZE;
+	
+	memcpy(_wbuf, buf, SDC_BLOCK_SIZE);
+	_txbuf_index = _wbuf; _txcount = SDC_BLOCK_SIZE;
 	_txdone = 0;
 
 	put32(SDC_BASE + DATATIMER, 0xFFFF0000);
 	put32(SDC_BASE + DATALENGTH, SDC_BLOCK_SIZE);
 
-	cmd = 25;                  // CMD24 = Write single sector; 25=read block
+	cmd = 25;                  // CMD24 = Write single sector; 25=write block
 	arg = (uint32_t)((block*2)*512);  // absolute byte offset in diks
 	do_command(cmd, arg, MMC_RSP_R1);
 
-	//printk("dataControl=%x\n", 0x91);
 	// write 0x91=|9|0001|=|9|DMA=0,BLOCK=0,0=Host->Card, Enable
-	put8(SDC_BASE + DATACTRL, 0x91); // Host->card
-
+	put32(SDC_BASE + DATACTRL, 0x91); // Host->card
 	CRIT_OUT(_p_lock)
 	return 0;
 }
 
-static inline int32_t sdc_write_done() {
-	return _txdone;
+static inline int32_t sdc_write_done(void) {
+	CRIT_IN(_p_lock)
+	if(_txdone == 0) {
+		CRIT_OUT(_p_lock)
+		return -1;
+	}
+	CRIT_OUT(_p_lock)
+	return 0;
 }
 
-void sdc_handle() {
+void sdc_handle(void) {
 	int32_t status, status_err;
 	int32_t i; 
 	uint32_t *up;
@@ -252,5 +257,5 @@ int32_t dev_sdc_write(int16_t id, uint32_t block, void* buf) {
 
 int32_t dev_sdc_write_done(int16_t id) {
 	(void)id;
-	return -1;
+	return sdc_write_done();
 }

@@ -20,6 +20,7 @@
 #include <ipc.h>
 #include <kfile.h>
 #include <procinfo.h>
+#include <tstr.h>
 
 typedef void (*entry_function_t)(void);
 
@@ -56,8 +57,8 @@ typedef struct {
 
 #define ENV_MAX 32
 typedef struct {
-	char name[SHORT_NAME_MAX];	
-	char* value;
+	tstr_t* name;
+	tstr_t* value;
 } proc_env_t;
 
 typedef struct {
@@ -84,8 +85,8 @@ typedef struct process {
 	int32_t father_pid; /*father pid*/
 	int32_t owner; /*owner for muti-user system*/
 	uint32_t start_sec; /*start time by second*/
-	char cmd[CMD_MAX]; /*run command*/
-	char pwd[FULL_NAME_MAX]; /*working dir*/
+	tstr_t* cmd; /*run command*/
+	tstr_t* pwd; /*working dir*/
 	int32_t wait_pid; /*waiting for specific process end*/
 	uint32_t slept_by; /*slept_by*/
 	proc_sleep_t sleep_counter;
@@ -111,7 +112,7 @@ extern const char* proc_get_env_value(int32_t index);
 extern int32_t proc_set_env(const char* name, const char* value);
 
 extern uint32_t *get_current_context(void);
-extern void proc_init();
+extern void proc_init(void);
 extern process_t *proc_create(uint32_t type);
 bool proc_load(process_t *proc, const char *proc_image, uint32_t img_size);
 void proc_start(process_t *proc);
@@ -131,8 +132,9 @@ void proc_exit(process_t* proc);
 void* pmalloc(uint32_t size);
 void pfree(void* p);
 
-int32_t get_procs_num();
+int32_t get_procs_num(void);
 proc_info_t* get_procs(int32_t *num);
+void _abort_entry(uint32_t vaddr);
 
 #endif
 

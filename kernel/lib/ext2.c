@@ -15,7 +15,7 @@ static int32_t search(INODE *ip, const char *name, read_block_func_t read_block,
 				c = dp->name[dp->name_len];  // save last byte
 				dp->name[dp->name_len] = 0;   
 				if (strcmp(dp->name, name) == 0 ){
-					return(dp->inode);
+					return(dp->inode - 1);
 				}
 				dp->name[dp->name_len] = c; // restore that last byte
 				cp += dp->rec_len;
@@ -28,8 +28,9 @@ static int32_t search(INODE *ip, const char *name, read_block_func_t read_block,
 
 #define MAX_DIR_DEPTH 4
 
-char* ext2_load(const char* filename, int32_t *sz, malloc_func_t mlc, read_block_func_t read_block, char* buf1, char* buf2) {
-	int32_t depth, i, me, iblk, count, u, blk12;
+char* ext2_load(const char* filename, int32_t *sz, read_block_func_t read_block, mem_funcs_t* mfs) {
+	char* buf1 = (char*)mfs->mlc(SDC_BLOCK_SIZE);
+	int32_t depth, i, ino, iblk, count, u, blk12;
 	char name[MAX_DIR_DEPTH][64];
 	char *ret, *addr;
 	uint32_t *up;
@@ -59,8 +60,10 @@ char* ext2_load(const char* filename, int32_t *sz, malloc_func_t mlc, read_block
 	}
 
 	/* read blk#2 to get group descriptor 0 */
-	if(read_block(2, buf1) != 0)
+	if(read_block(2, buf1) != 0) {
+		mfs->fr(buf1);
 		return NULL;
+	}
 	gp = (GD *)buf1;
 	iblk = (uint16_t)gp->bg_inode_table;
 
@@ -68,20 +71,27 @@ char* ext2_load(const char* filename, int32_t *sz, malloc_func_t mlc, read_block
 		return NULL;
 	ip = (INODE *)buf1 + 1;   // ip->root inode #2
 
+	char* buf2 = (char*)mfs->mlc(SDC_BLOCK_SIZE);
 	/* serach for system name */
 	for (i=0; i<depth; i++) {
-		me = search(ip, name[i], read_block, buf2) - 1;
-		if (me < 0) 
+		ino = search(ip, name[i], read_block, buf2);
+		if (ino < 0) {
+			mfs->fr(buf1);
+			mfs->fr(buf2);
 			return NULL;
-		if(read_block(iblk+(me/8), buf1) != 0)  // read block inode of me
+		}
+		if(read_block(iblk+(ino/8), buf1) != 0) { // read block inode of me
+			mfs->fr(buf1);
+			mfs->fr(buf2);
 			return NULL;
-		ip = (INODE *)buf1 + (me % 8);
+		}
+		ip = (INODE *)buf1 + (ino % 8);
 	}
 
 	*sz = ip->i_size;
 	int32_t mlc_size = ALIGN_UP(*sz, SDC_BLOCK_SIZE);
 	blk12 = ip->i_block[12];
-	addr = (char *)mlc(mlc_size);
+	addr = (char *)mfs->mlc(mlc_size);
 	ret = addr;
 	/* read indirect block into b2 */
 
@@ -104,5 +114,8 @@ char* ext2_load(const char* filename, int32_t *sz, malloc_func_t mlc, read_block
 			count += SDC_BLOCK_SIZE;
 		}
 	}
+
+	mfs->fr(buf1);
+	mfs->fr(buf2);
 	return ret;
 }

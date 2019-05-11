@@ -5,47 +5,43 @@
 #include <stdlib.h>
 #include <syscall.h>
 #include <sconf.h>
+#include <trunk.h>
 
 #define KEY_BACKSPACE 127
 #define KEY_LEFT 0x8
 
-static void gets(char* buf, int len) {
-	int i = 0;
+static int32_t gets(tstr_t* buf) {
+	tstr_empty(buf);	
 	while(true) {
-		if(i >= len)
-			break;
-
 		int c = getch();
-		if(c == 0) {
-			sleep(0);
-			continue;
-		}
+		if(c == 0)
+			return -1;
 
 		if (c == KEY_BACKSPACE) {
-			if (i > 0) {
+			if (buf->size > 0) {
 				//delete last char
 				putch(KEY_LEFT); 
 				putch(' ');
 				putch(KEY_LEFT); 
-				i--;
+				buf->size--;
 			}
 		}
 		else if (c == 8) {
-			if (i > 0) {
+			if (buf->size > 0) {
 				//delete last char
 				putch(c); 
-				i--;
+				buf->size--;
 			}
 		}
 		else {
 			putch(c);
 			if(c == '\r' || c == '\n')
 				break;
-			buf[i] = c;
-			i++;
+			tstr_addc(buf, c);
 		}
 	}
-	buf[i] = 0;
+	tstr_addc(buf, 0);
+	return 0;
 }
 
 static int cd(const char* dir) {
@@ -305,22 +301,24 @@ static int32_t read_config() {
 	const char* v = sconf_get(conf, ENV_PATH);
 	if(v[0] != 0) 
 		setenv(ENV_PATH, v);
-	sconf_free(conf, free);
+	sconf_free(conf, MFS);
 	return 0;
 }
 
 int main(int argc, char* argv[]) {
 	(void)argc;
 	(void)argv;
-	static char cmd[FULL_NAME_MAX];
+	tstr_t* cmdstr = tstr_new("", MFS);
 
 	read_config();
 	int uid = getuid();
 
 	while(1) {
 		printf("ewok %c ", uid==0?'#':'$');
+		if(gets(cmdstr) != 0)
+			break;
 
-		gets(cmd, FULL_NAME_MAX-1);
+		char* cmd = (char*)CS(cmdstr);
 		if(cmd[0] == 0)
 			continue;
 		if(handle(cmd) == 0)
@@ -335,12 +333,14 @@ int main(int argc, char* argv[]) {
 
 		int child_pid = fork();
 		if (child_pid == 0) {
-			return run_cmd(cmd);
+			int res = run_cmd(cmd);
+			tstr_free(cmdstr);	
+			return res;
 		}
 		else if(fg) {
 			wait(child_pid);
 		}
-		cmd[0] = 0;
 	}
+	tstr_free(cmdstr);	
 	return 0;
 }

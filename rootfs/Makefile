@@ -11,11 +11,13 @@ COMMON_OBJ=$(COMMON_LIB)/lib/kstring.o \
 	$(COMMON_LIB)/lib/device.o \
 	$(COMMON_LIB)/lib/sconf_parse.o \
 	$(COMMON_LIB)/lib/ext2.o \
+	$(COMMON_LIB)/lib/trunk.o \
+	$(COMMON_LIB)/lib/tstr.o \
 	$(COMMON_LIB)/lib/vprintf.o \
 	$(COMMON_LIB)/arch/arm/common/memcpy.o
 
 # flags
-CFLAGS = -I. -O2 \
+CFLAGS = -I. -g \
 				 -I ../lib/include \
 				 -I lib/include \
 				 -I $(COMMON_LIB)/include \

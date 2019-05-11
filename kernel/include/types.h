@@ -42,7 +42,7 @@ typedef unsigned int u32_t;
 #define MB (1024*KB)
 #define GB (1024*MB)
 
-#define CMD_MAX 128
+#define UCHAR_MAX 255
 #define FULL_NAME_MAX 256
 #define SHORT_NAME_MAX 32
 #define DEV_NAME_MAX 64
@@ -50,8 +50,13 @@ typedef unsigned int u32_t;
 #define ALIGN_DOWN(x, alignment) ((x) & ~(alignment - 1))
 #define ALIGN_UP(x, alignment) (((x) + alignment - 1) & ~(alignment - 1))
 
-typedef void (*free_func_t) (void* p);
 typedef void* (*malloc_func_t) (uint32_t size);
+typedef void (*free_func_t) (void* p);
+
+typedef struct {
+	malloc_func_t mlc;
+	free_func_t fr;
+} mem_funcs_t;
 
 #endif
 
